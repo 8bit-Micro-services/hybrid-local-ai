@@ -7,13 +7,23 @@ from app.core.schemas import AgentResult, Citation
 
 class Agent(Protocol):
     async def answer(self, query: str, context: str, citations: list[Citation]) -> AgentResult: ...
+    async def ping(self) -> bool: ...
 
 
 class OllamaAgent:
     def __init__(self, base_url: str, model: str, timeout_seconds: float = 45.0) -> None:
-        self.url = f"{base_url.rstrip('/')}/api/chat"
+        self.base_url = base_url.rstrip("/")
+        self.url = f"{self.base_url}/api/chat"
         self.model = model
         self.timeout = timeout_seconds
+
+    async def ping(self) -> bool:
+        try:
+            async with httpx.AsyncClient(timeout=3.0) as client:
+                res = await client.get(f"{self.base_url}/api/tags")
+                return res.status_code == 200
+        except Exception:
+            return False
 
     async def answer(self, query: str, context: str, citations: list[Citation]) -> AgentResult:
         prompt = self._build_prompt(query, context, citations)

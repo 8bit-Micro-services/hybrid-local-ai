@@ -17,7 +17,9 @@ class Orchestrator:
 
     async def handle(self, event: LineEvent) -> str:
         request_id = str(uuid4())
+        logger.info("request_started request_id=%s user_id=%s", request_id, event.user_id)
         retrieval = self.retriever.retrieve(event.message_text)
+        logger.info("retrieval_completed request_id=%s status=%s matches=%d", request_id, retrieval.status, len(retrieval.sources))
         agent_result = await self._answer(event.message_text, retrieval)
         text = self._format_answer(agent_result, retrieval)
         await self.sender.send(LineReply(reply_token=event.reply_token, text=text))

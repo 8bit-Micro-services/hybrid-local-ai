@@ -12,6 +12,7 @@ cp .env.example .env
 ```
 
 Health check: `GET http://localhost:8000/health`
+Readiness check: `GET http://localhost:8000/ready`
 
 LINE webhook: `POST http://localhost:8000/line/webhook`
 

@@ -14,6 +14,9 @@ class FakeAgent:
     async def answer(self, query, context, citations):
         return AgentResult(answer=f"ตอบ: {query}")
 
+    async def ping(self):
+        return True
+
 
 class FakeSender:
     def __init__(self):
@@ -98,3 +101,16 @@ def test_webhook_rejects_message_over_limit(tmp_path):
     response = client.post("/line/webhook", content=body, headers={"X-Line-Signature": signed(body)})
 
     assert response.status_code == 413
+
+
+def test_ready_endpoint_reports_status(tmp_path):
+    client, _ = make_client(tmp_path)
+
+    response = client.get("/ready")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "status": "ready",
+        "vault": True,
+        "ollama": True,
+    }

@@ -34,6 +34,17 @@ def create_app(
     async def health() -> dict[str, str]:
         return {"status": "ok"}
 
+    @app.get("/ready")
+    async def ready() -> dict[str, str | bool]:
+        vault_ready = orchestrator.retriever.vault_path.is_dir()
+        ollama_ready = await orchestrator.agent.ping()
+        status = "ready" if (vault_ready and ollama_ready) else "degraded"
+        return {
+            "status": status,
+            "vault": vault_ready,
+            "ollama": ollama_ready,
+        }
+
     @app.post("/line/webhook")
     async def line_webhook(request: Request) -> dict[str, str]:
         body = await request.body()

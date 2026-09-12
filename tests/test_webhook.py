@@ -11,7 +11,11 @@ from app.main import create_app
 
 
 class FakeAgent:
-    async def answer(self, query, context, citations):
+    def __init__(self):
+        self.received_histories = []
+
+    async def answer(self, query, context, citations, history=None):
+        self.received_histories.append(history)
         return AgentResult(answer=f"ตอบ: {query}")
 
     async def ping(self):
@@ -21,6 +25,10 @@ class FakeAgent:
 class FakeSender:
     def __init__(self):
         self.replies = []
+        self.loading_calls = []
+
+    async def show_loading(self, user_id, seconds=20):
+        self.loading_calls.append((user_id, seconds))
 
     async def send(self, reply):
         self.replies.append(reply)
@@ -54,7 +62,24 @@ def test_webhook_validates_signature_and_delivers_reply(tmp_path):
 
     assert response.status_code == 200
     assert response.json() == {"status": "ok", "handled": "1"}
-    assert sender.replies[0].text == "ตอบ: hello\n\nหมายเหตุ: ไม่พบเอกสารที่ตรงกันในคลังความรู้ภายในเครื่อง"
+    assert sender.replies[0].text == "ตอบ: hello\n\n(หมายเหตุ: ไม่พบเอกสารที่ตรงกันในคลังความรู้ภายในเครื่อง)"
+
+
+def test_orchestrator_maintains_multi_turn_history(tmp_path):
+    client, sender = make_client(tmp_path)
+    body1 = b'{"events":[{"type":"message","replyToken":"token1","source":{"userId":"U123"},"message":{"type":"text","text":"msg1"}}]}'
+    body2 = b'{"events":[{"type":"message","replyToken":"token2","source":{"userId":"U123"},"message":{"type":"text","text":"msg2"}}]}'
+
+    client.post("/line/webhook", content=body1, headers={"X-Line-Signature": signed(body1)})
+    client.post("/line/webhook", content=body2, headers={"X-Line-Signature": signed(body2)})
+
+    agent = client.app.state.orchestrator.agent
+    assert len(agent.received_histories) == 2
+    assert agent.received_histories[0] == []
+    assert agent.received_histories[1] == [
+        {"role": "user", "content": "msg1"},
+        {"role": "assistant", "content": "ตอบ: msg1"},
+    ]
 
 
 def test_webhook_rejects_invalid_signature(tmp_path):

@@ -1,6 +1,8 @@
 import json
 import logging
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
+from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
 
@@ -12,7 +14,11 @@ from app.services.agent import OllamaAgent
 from app.services.output import LineReplySender
 from app.services.retrieval import LocalVaultRetriever
 
-logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("hybrid_local_ai")
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+)
 
 
 def create_app(
@@ -26,7 +32,25 @@ def create_app(
         sender=LineReplySender(settings.line_channel_access_token),
     )
     limiter = RateLimiter(settings.rate_limit_per_minute)
-    app = FastAPI(title="Hybrid Local AI Loop", version="0.1.0")
+
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        vault_path = Path(settings.obsidian_vault_path)
+        vault_path.mkdir(parents=True, exist_ok=True)
+        doc_count = len(list(vault_path.rglob("*.md")))
+        logger.info(
+            "Starting Hybrid Local AI service | Ollama Model: %s | Vault: %s (%d docs) | Allowed users: %d",
+            settings.ollama_model,
+            settings.obsidian_vault_path,
+            doc_count,
+            len(settings.allowed_users),
+        )
+        if not settings.line_channel_secret or settings.line_channel_secret == "replace-me":
+            logger.warning("LINE_CHANNEL_SECRET is not configured. Webhooks will be rejected.")
+        yield
+        logger.info("Shutting down Hybrid Local AI service")
+
+    app = FastAPI(title="Hybrid Local AI Loop", version="0.2.0", lifespan=lifespan)
     app.state.settings = settings
     app.state.orchestrator = orchestrator
 
